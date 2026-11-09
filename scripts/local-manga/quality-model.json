@@ -1,0 +1,8 @@
+[
+  {
+    "path": "diffusion_models/flux-2-klein-base-4b-fp8.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4b-fp8/resolve/main/flux-2-klein-base-4b-fp8.safetensors",
+    "bytes": 4089498488,
+    "sha256": "44bab3a86fe98b85d21dd2a4729ebdc3ae51fb8a39f76e457e18c724219e6840"
+  }
+]

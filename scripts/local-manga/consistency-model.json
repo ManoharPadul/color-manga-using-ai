@@ -1,0 +1,8 @@
+[
+  {
+    "path": "loras/f2k_4B_consist_20260314.safetensors",
+    "url": "https://huggingface.co/lrzjason/Consistance_Edit_Lora/resolve/main/f2k_4B_consist_20260314.safetensors",
+    "bytes": 385379872,
+    "sha256": "bed1e7e8747bc4572a20a7fcef436e82cfbfa5430d0162eda713b55d7a3c7ce4"
+  }
+]

@@ -1,0 +1,12 @@
+MangaColorAI
+Copyright (c) 2026 ArtCraft Team and PhotoCraft contributors for extracted MangaColorAI-specific source.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option.
+See LICENSE-MIT and LICENSE-APACHE.
+
+This standalone repository contains MangaColorAI-specific code extracted and refactored from a
+PhotoCraft development checkout. It does not contain the PhotoCraft editor, engine, CLI, or
+`.pcraft` integration. PhotoCraft and ArtCraft names and marks are not project branding.
+
+Third-party components and separately downloaded model files retain their own licenses. See
+ATTRIBUTION.md and the linked upstream repositories/model cards. Model weights and ComfyUI are not
+included in this repository or its Windows release archive.

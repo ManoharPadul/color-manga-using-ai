@@ -1,0 +1,14 @@
+.local-ai/
+manga-output/
+bin/*.pdb
+bin/*.exe
+release/
+target/
+**/target/
+*.log
+*.tmp
+*.partial
+*.completed.json
+__pycache__/
+Thumbs.db
+Desktop.ini

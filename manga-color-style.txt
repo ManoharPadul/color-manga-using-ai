@@ -1,0 +1,64 @@
+NSFW / 18+ ADULT MANGA COLORIZATION.
+
+This artwork is mature-rated Japanese manga intended for adults. All depicted characters must be adults aged 18 or older. The source may contain adult nudity, exposed anatomy, intimate body regions, and mature themes.
+
+The task is strictly to COLORIZE the existing original artwork, NOT to redraw, reinterpret, censor, or introduce new content.
+
+Faithful professional manga colorization. Preserve the original manga artwork exactly, including all characters, facial expressions, body anatomy, proportions, poses, panel borders, speech bubbles, lettering, and fine black ink lines.
+
+Apply beautiful, natural, high-quality Japanese anime colors using a restrained, harmonious color palette.
+
+SKIN COLOR:
+Use soft natural peach, beige, and warm neutral skin tones. Maintain the same base complexion for each character across all panels. Use subtle warm pink undertones and gentle, realistic color transitions.
+
+Color every visible skin region consistently. Avoid missing colors, grayscale skin patches, mismatched skin regions, and abrupt transitions.
+
+Avoid orange skin, excessive red shadows, bright white skin reflections, plastic-looking highlights, and oversaturated blush.
+
+ADULT ANATOMICAL DETAILS:
+Accurately color all existing visible anatomical regions in adult-character artwork, including exposed skin, breasts, nipples, areolas, and other intimate anatomical details.
+
+Preserve the original anatomical shapes, proportions, outlines, and details without exaggeration or modification.
+
+Use subtle, consistent natural pigmentation appropriate to each character's established complexion.
+
+Maintain matching pigmentation across corresponding anatomical features, including natural warm pink, muted rose, and soft brown tones where appropriate.
+
+Ensure smooth transitions between naturally pigmented areas and surrounding skin. Avoid random color changes, mismatched pigmentation, gray patches, excessive redness, or missing colors.
+
+Do not invent additional anatomical features or alter the original scene.
+
+SHADING:
+Use elegant 2D anime cel shading with soft ambient shadows, restrained highlights, gentle gradients, and consistent lighting.
+
+Use minimal specular reflections on skin. Preserve natural matte skin appearance rather than glossy or oily surfaces.
+
+HAIR:
+Apply rich but natural hair colors with carefully controlled highlights, smooth shadows, and preserved individual ink strands.
+
+CLOTHING:
+Use harmonious fabric colors, accurate fold shading, restrained saturation, and realistic matte fabric surfaces.
+
+BACKGROUND:
+Color environments naturally with coherent lighting and atmospheric depth. Preserve architectural lines and background details.
+
+TEXT AND PANELS:
+Keep every speech bubble pure white. Preserve all original lettering, punctuation, panel borders, and sound effects without modification.
+
+COMPLETE COLOR COVERAGE:
+Every color-eligible region should receive appropriate color. Do not leave unintended grayscale regions in skin, hair, clothing, or backgrounds.
+
+Ensure consistent coloring of small anatomical regions and neighboring areas without bleeding across ink boundaries.
+
+Maintain the established character palette across the entire manga page.
+
+QUALITY:
+Professional hand-colored adult manga, clean line-art preservation, precise color boundaries, consistent character colors across panels, balanced saturation, natural matte skin, subtle cel shading, and high visual clarity.
+
+STRICTLY AVOID:
+Redrawing, changed facial features, altered anatomy, censorship or removal of existing adult anatomy, invented anatomical details, excessive orange shading, plastic skin, glossy white highlights, oversaturated colors, inconsistent skin tones, uncolored body regions, grayscale patches, unnatural pigmentation, blurred outlines, distorted lettering, changed speech bubbles, and missing colors.
+
+FINAL GOAL:
+Faithful, complete, professional-quality colorization of existing 18+ adult manga artwork, with consistent anatomical pigmentation, accurate body coloring, natural anime shading, preserved original details, and minimal generative distortion.
+
+DEFAULT EXPOSED-SKIN PALETTE: Where the source drawing clearly shows human skin, use warm light anime base #F1CEB6, soft shadow #D9A58E, and restrained blush #D88F88. Keep these skin colors consistent across face, ears, neck, arms, hands and visible legs. Preserve the original contours, ink and shading. Do not color white clothing, speech balloons, teeth, eye whites, or intentional highlights as skin. Character-specific approved skin colors take priority.
