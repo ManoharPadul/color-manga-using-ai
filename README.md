@@ -6,7 +6,7 @@ Local Windows manga colorization and review tools using FLUX.2 Klein through Com
 
 ## Windows quick start
 
-1. Download and extract `MangaColorAI-0.3.13-windows-x64.zip` from the [Releases page](https://github.com/ManoharPadul/color-manga-using-ai/releases). Keep the extracted folder together; the app locates its scripts relative to that folder.
+1. Download and extract `MangaColorAI-0.3.14-windows-x64.zip` from the [Releases page](https://github.com/ManoharPadul/color-manga-using-ai/releases). Keep the extracted folder together; the app locates its scripts relative to that folder.
 2. For the recommended 4B FP8 setup, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-manga\Setup.ps1 -ModelSize 4B`. For 9B FP8, use `-ModelSize 9B`. Setup downloads ComfyUI's portable Windows runtime, installs its pinned CUDA PyTorch runtime, downloads the chosen model files, and checks their SHA-256 hashes. Keep at least 40 GB free for 4B or 50 GB for 9B so there is room for runtime, model and working files.
 3. Run `Start MangaColorAI.cmd` and choose an image or a folder. The local ComfyUI service binds to `127.0.0.1`; it starts when the app needs it. No image is uploaded by these workflows.
 4. Outputs go to `manga-output`. Inputs are not overwritten. Folder jobs process images one by one and save reports/settings alongside the results.
@@ -17,7 +17,7 @@ Supported image inputs in the standalone preparation helper: PNG, JPEG, WebP, BM
 
 ### Windows command files
 
-The repository keeps a small set of launch/build commands: `Start MangaColorAI.cmd`, `Stop Local AI.cmd`, and `Build MangaColorAI.cmd`. The desktop studio handles both single images and folders, model selection, palettes, character/outfit profiles, reference pages, source-ink controls, optional text processing, color-coverage diagnostics, painted repair masks, and before/after review. See [launcher notes](MANGA-LAUNCHERS.md).
+The repository keeps a small set of launch/build commands: `Start MangaColorAI.cmd`, `Stop Local AI.cmd`, and `Build MangaColorAI.cmd`. The separate upscaler has its own `Start Manga Upscale AI.cmd`. The desktop colorization studio handles both single images and folders, model selection, palettes, character/outfit profiles, reference pages, source-ink controls, optional text processing, color-coverage diagnostics, painted repair masks, and before/after review. See [launcher notes](MANGA-LAUNCHERS.md).
 
 Default colorization settings are four inference steps, guidance 1, strength 1, and seed 42. These are a speed-oriented baseline, not quality guarantees. Keep a fixed seed when making controlled prompt/settings comparisons. The separate upscaler is launched with `Start Manga Upscale AI.cmd` after its PowerShell setup step; see [MANGA-UPSCALE.md](MANGA-UPSCALE.md).
 

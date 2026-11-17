@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='0.3.13')
+param([string]$Version='0.3.14')
 . "$PSScriptRoot/Common.ps1"
 $required = @('MangaColorAI.exe','MangaColorAI-Image.exe','MangaColorAI-Text.exe')
 foreach ($name in $required) {
@@ -9,7 +9,7 @@ foreach ($name in $required) {
 $gitFiles = @(& git -C $RepoRoot ls-files --cached)
 if ($LASTEXITCODE -ne 0 -or !$gitFiles.Count) { throw 'Commit the standalone source files before packaging the Windows ZIP.' }
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$stage = Join-Path $tempRoot ('MangaColorAI-0.3.13-package-' + [Guid]::NewGuid().ToString('N'))
+$stage = Join-Path $tempRoot ('MangaColorAI-' + $Version + '-package-' + [Guid]::NewGuid().ToString('N'))
 $folder = 'MangaColorAI-' + $Version + '-windows-x64'
 $packageRoot = Join-Path $stage $folder
 $null = [IO.Directory]::CreateDirectory($packageRoot)
