@@ -7,23 +7,19 @@ Local Windows manga colorization and review tools using FLUX.2 Klein through Com
 ## Windows quick start
 
 1. Download and extract `MangaColorAI-0.3.13-windows-x64.zip` from the [Releases page](https://github.com/ManoharPadul/color-manga-using-ai/releases). Keep the extracted folder together; the app locates its scripts relative to that folder.
-2. For the recommended 4B FP8 setup, run `Setup MangaColorAI 4B.cmd`. For 9B FP8, run `Setup MangaColorAI 9B.cmd`. Setup downloads ComfyUI's portable Windows runtime, installs its pinned CUDA PyTorch runtime, downloads the chosen model files, and checks their SHA-256 hashes. Keep at least 40 GB free for 4B or 50 GB for 9B so there is room for runtime, model and working files.
+2. For the recommended 4B FP8 setup, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-manga\Setup.ps1 -ModelSize 4B`. For 9B FP8, use `-ModelSize 9B`. Setup downloads ComfyUI's portable Windows runtime, installs its pinned CUDA PyTorch runtime, downloads the chosen model files, and checks their SHA-256 hashes. Keep at least 40 GB free for 4B or 50 GB for 9B so there is room for runtime, model and working files.
 3. Run `Start MangaColorAI.cmd` and choose an image or a folder. The local ComfyUI service binds to `127.0.0.1`; it starts when the app needs it. No image is uploaded by these workflows.
 4. Outputs go to `manga-output`. Inputs are not overwritten. Folder jobs process images one by one and save reports/settings alongside the results.
 
+For image enlargement only, use the separate [Manga Upscale AI](MANGA-UPSCALE.md) utility. It uses Real-ESRGAN x4plus-anime and FFmpeg; it does not start the colorization model or modify MangaColorAI settings.
+
 Supported image inputs in the standalone preparation helper: PNG, JPEG, WebP, BMP, TIFF, and GIF (one decoded frame). Colorized output is PNG at the input image's pixel dimensions. Color models may work at a smaller megapixel target and resize back afterward; original-size output does not restore fine detail that was lost during model downscaling.
 
-### Command launchers
+### Windows command files
 
-| Model | One image | Folder |
-|---|---|---|
-| FLUX.2 Klein 4B FP8 (recommended) | `Colorize Manga 4B FP8.cmd` | `Colorize Folder 4B FP8.cmd` |
-| FLUX.2 Klein 4B BF16 | `Colorize Manga 4B BF16.cmd` | `Colorize Folder 4B BF16.cmd` |
-| FLUX.2 Klein 9B FP8 | `Colorize Manga 9B FP8.cmd` | `Colorize Folder 9B FP8.cmd` |
+The repository keeps a small set of launch/build commands: `Start MangaColorAI.cmd`, `Stop Local AI.cmd`, and `Build MangaColorAI.cmd`. The desktop studio handles both single images and folders, model selection, palettes, character/outfit profiles, reference pages, source-ink controls, optional text processing, color-coverage diagnostics, painted repair masks, and before/after review. See [launcher notes](MANGA-LAUNCHERS.md).
 
-Each can be double-clicked to choose the input or receive a path by drag-and-drop. The desktop studio exposes sampling settings, palette and character/outfit profiles, reference pages, source-ink controls, optional text processing, color-coverage diagnostics, painted repair masks, and before/after review. See [launcher notes](MANGA-LAUNCHERS.md). Use `Stop Local AI.cmd` to stop the backend process MangaColorAI started and recorded.
-
-Default colorization settings are four inference steps, guidance 1, strength 1, and seed 42, with a 0.7 MP regular working target in the direct wrappers. These are a speed-oriented baseline, not quality guarantees. The advanced 9B and high-resolution launchers can use larger working targets at higher VRAM cost. Keep a fixed seed when making controlled prompt/settings comparisons.
+Default colorization settings are four inference steps, guidance 1, strength 1, and seed 42. These are a speed-oriented baseline, not quality guarantees. Keep a fixed seed when making controlled prompt/settings comparisons. The separate upscaler is launched with `Start Manga Upscale AI.cmd` after its PowerShell setup step; see [MANGA-UPSCALE.md](MANGA-UPSCALE.md).
 
 ## Models and machine requirements
 
@@ -67,7 +63,7 @@ Requirements: Windows x64, Rust stable toolchain (edition 2024 support), Git, Mi
 
 1. Install Rust and Git.
 2. Run `Build MangaColorAI.cmd`. It builds the native studio and `MangaColorAI-Image.exe` into `bin/`, then checks out the pinned Koharu source and builds its optional text helper. Use `-SkipTextHelper` with `scripts/local-manga/Build-MangaColorAI.ps1` to skip Koharu.
-3. Run `Setup MangaColorAI 4B.cmd` or `Setup MangaColorAI 9B.cmd` to install inference dependencies and model files.
+3. Install inference dependencies and model files with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-manga\Setup.ps1 -ModelSize 4B` or change `4B` to `9B`.
 
 The Rust binaries can also be built individually with Cargo manifests under `tools/`. Tests and CPU-only diagnostics are available under `scripts/local-manga`; GPU inference smoke testing is opt-in and requires local model files.
 
