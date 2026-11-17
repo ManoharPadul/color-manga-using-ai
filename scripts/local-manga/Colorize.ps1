@@ -9,7 +9,7 @@ param(
     [ValidateSet('Fast','Detailed','BaseExperimental')][string]$Quality = 'Fast',
     [ValidateRange(0.2,1.0)][double]$Strength = 1.0,
     [ValidateRange(0,1.5)][double]$Consistency = 0,
-    [ValidateSet('Auto','FP8','BF16')][string]$Precision = 'Auto',
+    [ValidateSet('Auto','FP8','BF16','INT8')][string]$Precision = 'Auto',
     [ValidateSet('Preserve','Short','Minimal')][string]$PromptStyle = 'Preserve',
     [string]$OutputDirectory,
     [Alias('ProtectMaskPath')][string]$TextMaskPath,
@@ -24,18 +24,55 @@ param(
     [ValidateRange(1,3)][int]$MaxRepairRegions = 1,
     [string]$PaletteFile,
     [object]$PaletteData,
-    [ValidateSet('4B','9B')][string]$ModelSize = '4B',
+    [ValidateSet('4B','9B','Qwen21','Flux1Kontext','MiniMaxH3','IllustriousXL')][string]$ModelSize = '4B',
     [string]$ReferenceImagePath,
+    [int]$OwnerProcessId=0,
+    [string]$ControlFile,
     [switch]$NoOpen,
     [ValidateRange(30, 3600)][int]$TimeoutSeconds = 900
 )
 . "$PSScriptRoot/Common.ps1"
+. "$PSScriptRoot/Studio-Jobs.ps1"
+Set-MangaOwner -ProcessId $OwnerProcessId -ControlFile $ControlFile
 $totalWatch=[Diagnostics.Stopwatch]::StartNew()
 if($StyleFile){
     if($PSBoundParameters.ContainsKey('Palette')){throw 'Choose -StyleFile or -Palette, not both.'}
     $Palette=Read-MangaStyleFile -Path $StyleFile
     Write-Host ('Color style file: '+[IO.Path]::GetFullPath($StyleFile))
 }elseif (!$PSBoundParameters.ContainsKey('Palette')) { $Palette = Read-DefaultMangaStyle -Root $RepoRoot }
+if ($ModelSize -in @('Qwen21','MiniMaxH3') -and $Precision -eq 'Auto') { $Precision = 'INT8' }
+if ($ModelSize -eq 'Flux1Kontext' -and $Precision -eq 'Auto') { $Precision = 'FP8' }
+if ($ModelSize -eq 'Qwen21') {
+    if ($Precision -ne 'INT8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0 -or $Strength -ne 1.0) { throw 'Qwen Image 2.1 requires INT8, strength 1.0, and no FLUX consistency adapter.' }
+    if (!$Steps) { $Steps = 25 }
+    foreach ($required in (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'qwen21-models.json') -Raw | ConvertFrom-Json)) {
+        $path = Join-Path $AiRoot ('models/' + $required.path)
+        if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -ne [long]$required.bytes) { throw "Missing Qwen Image 2.1 file $($required.path). Run Setup.ps1 -IncludeQwen21." }
+    }
+}
+if ($ModelSize -eq 'Flux1Kontext') {
+    if ($Precision -ne 'FP8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0) { throw 'FLUX.1 Kontext requires FP8 and no FLUX.2 consistency adapter.' }
+    if (!$Steps) { $Steps = 20 }
+    $checkpoint = Join-Path $AiRoot 'models/diffusion_models/flux1-kontext-dev-fp8-e4m3fn.safetensors'
+    if (!(Test-Path -LiteralPath $checkpoint -PathType Leaf) -or (Get-Item -LiteralPath $checkpoint).Length -ne 11901540704) { throw 'FLUX.1 Kontext checkpoint is missing. Accept the BFL license and copy it into .local-ai/models/diffusion_models.' }
+    foreach ($required in (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'flux1-kontext-models.json') -Raw | ConvertFrom-Json)) {
+        $path = Join-Path $AiRoot ('models/' + $required.path)
+        if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -ne [long]$required.bytes) { throw "Missing FLUX.1 Kontext component $($required.path). Run Setup.ps1 -IncludeFlux1Kontext." }
+    }
+}
+if ($ModelSize -eq 'MiniMaxH3') {
+    if ($Precision -ne 'INT8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0 -or $Strength -ne 1.0) { throw 'MiniMax H3 Image requires INT8, strength 1.0 and no FLUX consistency adapter.' }
+    if (!$Steps) { $Steps = 6 }
+    $Megapixels = 4.0
+}
+if ($ModelSize -eq 'IllustriousXL') {
+    if ($Precision -eq 'Auto') { $Precision = 'FP8' }
+    if ($Precision -notin @('FP8','BF16') -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0) { throw 'Illustrious XL uses its bundled SDXL checkpoint; FLUX consistency and BaseExperimental are unavailable.' }
+    if (!$Steps) { $Steps = 20 }
+    if (!$PSBoundParameters.ContainsKey('Strength')) { $Strength = 0.35 }
+    $checkpoint = Join-Path $AiRoot 'models/checkpoints/Illustrious-XL-v2.0.safetensors'
+    if (!(Test-Path -LiteralPath $checkpoint -PathType Leaf) -or (Get-Item -LiteralPath $checkpoint).Length -ne 6938040674) { throw 'Illustrious XL v2.0 checkpoint is missing or incomplete. Run Setup.ps1 -ModelSize None -IncludeIllustriousXL.' }
+}
 if ($ModelSize -eq '9B') {
     if ($Quality -ne 'Fast' -or $Consistency -gt 0 -or $Precision -eq 'BF16') { throw 'Use 9B with Fast quality, FP8 precision and no 4B consistency adapter.' }
     foreach ($required in @('diffusion_models/flux-2-klein-9b-fp8.safetensors','text_encoders/qwen_3_8b_fp8mixed.safetensors')) {
@@ -90,7 +127,7 @@ if ($source.Length -gt 512MB) { throw 'Input exceeds 512 MB. Export a smaller pa
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $RepoRoot 'manga-output' }
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force $outputRoot | Out-Null
-Start-LocalBackend
+Start-LocalBackend -ModelSize $ModelSize
 $id = [Guid]::NewGuid().ToString('N')
 $inputName = "mangacolorai-$id.png"
 $inputFile = Join-Path $ComfyRoot "input/$inputName"
@@ -156,16 +193,26 @@ if ($PromptStyle -eq 'Short') {
 if ($PromptStyle -eq 'Minimal') {
     $instruction = 'Colorize this manga illustration. Keep its original drawing, facial expressions and existing lettering unchanged. ' + $Palette
 }
+if ($ModelSize -eq 'Qwen21') {
+    $instruction = 'Keep the input lettering, glyph shapes, spacing, positions, speech bubbles, panel borders, line art, faces and poses unchanged. Do not rewrite or duplicate any text. Color only existing enclosed manga artwork. ' + $instruction
+}
+if ($ModelSize -eq 'MiniMaxH3') {
+    $instruction = 'Use the source monochrome drawing as the geometry truth. Keep every line-art boundary, text glyph, bubble, panel border, face, eye, pose, garment contour and visible/covered region unchanged. Add color only inside existing artwork. Color all clearly visible hair, skin, garments and background surfaces using the supplied palette and natural anime cel shading; retain existing folds, highlights, patterns, screentones and shadow structure. Do not invent or remove objects. ' + $instruction
+}
 if ($referenceName) {
     $instruction = 'Image 1 is the manga page to colorize. Image 2 is a COLOR REFERENCE ONLY: match corresponding hair, eyes, clothes and materials in image 1 to image 2. Keep the composition and all panels of image 1. Do not copy the layout or objects from image 2. ' + $instruction
 }
 $graph = New-ColorizeGraph -ImageName $inputName -Instruction $instruction -Seed $Seed `
     -Megapixels $Megapixels -Prefix "MangaColorAI/$id" -ReferenceImageName $referenceName `
     -Quality $Quality -Strength $Strength -Consistency $Consistency -Precision $Precision -ModelSize $ModelSize -SamplingSteps $Steps
-if ($DebugOutput) {
-    $graph | Add-Member -MemberType NoteProperty -Name '90' -Value @{class_type='SaveImage';inputs=@{images=@('2',0);filename_prefix="MangaColorAI/$id-input"}}
-}
-Write-Host "Source $sourceWidth x $sourceHeight; model $ModelSize $Precision; steps $($graph.'16'.inputs.steps); CFG $($graph.'13'.inputs.cfg); seed $Seed; strength $Strength; working target $Megapixels MP; inference padding 0,0,0,0."
+$samplerNode = switch ($ModelSize) { 'Qwen21' {'6'} 'Flux1Kontext' {'11'} 'MiniMaxH3' {'9'} 'IllustriousXL' {'6'} default {'16'} }
+$saveNode = switch ($ModelSize) { 'Qwen21' {'8'} 'Flux1Kontext' {'13'} 'MiniMaxH3' {'11'} 'IllustriousXL' {'8'} default {'19'} }
+$modelInputNode = switch ($ModelSize) { 'Qwen21' {'4'} 'Flux1Kontext' {'1'} 'MiniMaxH3' {'2'} 'IllustriousXL' {'1'} default {'2'} }
+$samplerInputs = $graph.PSObject.Properties[$samplerNode].Value.inputs
+$reportedSampler = if ($ModelSize -in @('Qwen21','Flux1Kontext','MiniMaxH3','IllustriousXL')) { $samplerInputs.sampler_name } else { $graph.'15'.inputs.sampler_name }
+$reportedScheduler = if ($ModelSize -in @('Qwen21','Flux1Kontext','MiniMaxH3','IllustriousXL')) { $samplerInputs.scheduler } else { 'Flux2Scheduler' }
+if ($DebugOutput) { $graph | Add-Member -MemberType NoteProperty -Name '90' -Value @{class_type='SaveImage';inputs=@{images=@($modelInputNode,0);filename_prefix="MangaColorAI/$id-input"}} }
+Write-Host "Source $sourceWidth x $sourceHeight; model $ModelSize $Precision; steps $($samplerInputs.steps); seed $Seed; strength $Strength; working target $Megapixels MP."
 $body = @{ prompt = $graph; client_id = "mangacolorai-$id" } | ConvertTo-Json -Depth 30
 $queued = Invoke-RestMethod "$Api/prompt" -Method Post -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $promptId = $queued.prompt_id
@@ -189,13 +236,14 @@ if ($null -eq $result -or !$result.status.completed) {
     # Do not interrupt a potentially unrelated job. This request remains in backend history.
     throw "Timed out waiting for job $promptId. Check $Api/history/$promptId before retrying."
 }
-$image = $result.outputs.'19'.images[0]
+$image = $result.outputs.PSObject.Properties[$saveNode].Value.images[0]
 $stem = $source.BaseName + '-' + $id.Substring(0, 8)
 $png = Join-Path $outputRoot "$stem-color.png"
 $query = 'filename=' + [Uri]::EscapeDataString($image.filename) + '&subfolder=' +
     [Uri]::EscapeDataString($image.subfolder) + '&type=output'
 $workingOutput = Join-Path $outputRoot "$stem-working.png"
 Save-LocalImage -Uri "$Api/view?$query" -Destination $workingOutput
+Wait-MangaControl -ControlFile $ControlFile
 $debugDirectory=$null
 if ($DebugOutput) {
     $debugDirectory=Join-Path $outputRoot "$stem-debug"
@@ -236,7 +284,7 @@ if ($CoverageMode -ne 'Off') {
         $beforeReport=Measure-ColorCoverage -Original $sourceGrid -Raw $rawGrid -Before $beforeGrid -Final $beforeGrid `
             -Regions $colorRegions -ProtectionMask $TextMaskPath -MaskPadding $MaskPadding -ProtectionMaskMode $MaskMode -Width $sourceWidth -Height $sourceHeight
         $repairOptions=@{ModelSize=$ModelSize;Precision=$Precision;Quality=$Quality;Strength=$Strength;Consistency=$Consistency;
-            Megapixels=$Megapixels;Seed=$Seed;Steps=$graph.'16'.inputs.steps;PromptStyle=$PromptStyle;Palette=$Palette;CoverageMode='Off';NoOpen=$true}
+            Megapixels=$Megapixels;Seed=$Seed;Steps=$samplerInputs.steps;PromptStyle=$PromptStyle;Palette=$Palette;CoverageMode='Off';NoOpen=$true}
         $repairResult=Invoke-ColorRegionRepairs -SourcePath $source.FullName -ColorPath $png -Regions $colorRegions -Report $beforeReport `
             -ProtectionMask $TextMaskPath -MaskPadding $MaskPadding -Width $sourceWidth -Height $sourceHeight `
             -ModelOptions $repairOptions -MaxRegions $MaxRepairRegions -WorkDirectory (Join-Path $AiRoot "repairs/$id") -CurrentGrid $beforeGrid -MaskMode $MaskMode
@@ -264,7 +312,7 @@ if ($CoverageMode -ne 'Off') {
     Write-Host "Coverage: $($coverageReport.components.Count) review candidates; $($repairResult.repaired) accepted repairs. Report: $coverageReportPath"
     if ($coverageReport.neutral_samples_restored_by_protection -gt 0) { Write-Warning 'A protection mask restored gray pixels inside declared color-eligible artwork. Review mask overlap; protected text was not overridden.' }
 }
-$modelLabel = if ($Quality -eq 'BaseExperimental') { 'FLUX.2 klein Base 4B FP8' } else { "FLUX.2 klein $ModelSize $Precision" }
+$modelLabel = switch ($ModelSize) { 'Qwen21' {'Qwen Image 2.1 INT8 ConvRot'} 'Flux1Kontext' {'FLUX.1 Kontext Dev FP8'} 'MiniMaxH3' {'MiniMax H3 Image INT8 + NVFP4'} 'IllustriousXL' {'Illustrious XL v2.0 SDXL img2img (experimental)'} default { if ($Quality -eq 'BaseExperimental') {'FLUX.2 klein Base 4B FP8'} else {"FLUX.2 klein $ModelSize $Precision"} } }
 $metadata = @{ source = $source.FullName; model = $modelLabel; quality = $Quality; strength=$Strength;
     consistency=$Consistency; precision=$Precision; prompt_style=$PromptStyle; seed = $Seed;
     megapixels = $Megapixels; palette = $Palette; palette_file = $PaletteFile; reference_image = $ReferenceImagePath;
@@ -273,7 +321,7 @@ $metadata = @{ source = $source.FullName; model = $modelLabel; quality = $Qualit
     output_width = $sourceWidth; output_height = $sourceHeight;
     working_width = $workingWidth; working_height = $workingHeight;
     output_resized = ($workingWidth -ne $sourceWidth -or $workingHeight -ne $sourceHeight);
-    steps=$graph.'16'.inputs.steps;guidance=$graph.'13'.inputs.cfg;sampler=$graph.'15'.inputs.sampler_name;scheduler='Flux2Scheduler';
+    steps=$samplerInputs.steps;sampler=$reportedSampler;scheduler=$reportedScheduler;workflow=$ModelSize;
     restoration=$restoration; mask_space=$MaskSpace; debug_directory=$debugDirectory;
     protection_regions=$ProtectionRegionsPath;
     color_regions=$ColorRegionsPath;coverage_mode=$CoverageMode;coverage_report=$coverageReportPath;

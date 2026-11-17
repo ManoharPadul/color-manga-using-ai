@@ -1,0 +1,8 @@
+[
+  {
+    "path": "checkpoints/Illustrious-XL-v2.0.safetensors",
+    "url": "https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors",
+    "bytes": 6938040674,
+    "sha256": "c2a1a3eaa13d4c107dc7e00c3fe830cab427aa026362740ea094745b3422a331"
+  }
+]

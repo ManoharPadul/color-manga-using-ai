@@ -1,0 +1,20 @@
+[
+  {
+    "path": "text_encoders/clip_l.safetensors",
+    "bytes": 246144152,
+    "sha256": "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd",
+    "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors"
+  },
+  {
+    "path": "text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors",
+    "bytes": 5157348688,
+    "sha256": "a498f0485dc9536735258018417c3fd7758dc3bccc0a645feaa472b34955557a",
+    "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/3bcfe977a9a2617a0b9025076030e217795fe028/t5xxl_fp8_e4m3fn_scaled.safetensors"
+  },
+  {
+    "path": "vae/ae.safetensors",
+    "bytes": 335304388,
+    "sha256": "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38",
+    "url": "https://huggingface.co/Comfy-Org/Lumina-Image-2/resolve/fad37f713965bb81ab2c9318296904c374099ece/split_files/vae/ae.safetensors"
+  }
+]

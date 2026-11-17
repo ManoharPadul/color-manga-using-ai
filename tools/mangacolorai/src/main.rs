@@ -1165,10 +1165,30 @@ impl eframe::App for Studio {
                 ui.add_enabled_ui(!self.busy, |ui| {
                     ui.label("Colorization model");
                     ui.menu_button(format!("Model: {}", self.settings.model), |ui| {
-                        for v in ["9B FP8", "4B FP8", "4B BF16"] {
-                            ui.selectable_value(&mut self.settings.model, v.into(), v);
+                        for v in [
+                            "9B FP8", "4B FP8", "4B BF16",
+                            "Qwen Image 2.1 INT8", "FLUX.1 Kontext FP8", "MiniMax H3 Image INT8", "Illustrious XL v2.0 (experimental)",
+                        ] {
+                            if ui.selectable_value(&mut self.settings.model, v.into(), v).clicked() {
+                                match v {
+                                    "Qwen Image 2.1 INT8" => { self.settings.steps = 25; self.settings.megapixels = 1.5; }
+                                    "FLUX.1 Kontext FP8" => { self.settings.steps = 20; self.settings.megapixels = 1.5; }
+                                    "MiniMax H3 Image INT8" => { self.settings.steps = 6; self.settings.megapixels = 4.0; }
+                                    "Illustrious XL v2.0 (experimental)" => { self.settings.steps = 20; self.settings.megapixels = 1.0; }
+                                    _ => { self.settings.steps = 4; self.settings.megapixels = 1.5; }
+                                }
+                            }
                         }
                     });
+                    if self.settings.model == "FLUX.1 Kontext FP8" {
+                        ui.small("Needs FLUX.1 Kontext FP8 checkpoint and accepted BFL license terms.");
+                    } else if self.settings.model == "MiniMax H3 Image INT8" {
+                        ui.small("High memory use; 24 GB VRAM is not guaranteed. Uses 6 steps at 4 MP.");
+                    } else if self.settings.model == "Qwen Image 2.1 INT8" {
+                        ui.small("Needs about 17 GB of model files and a separate CUDA 13 runtime.");
+                    } else if self.settings.model == "Illustrious XL v2.0 (experimental)" {
+                        ui.small("Experimental SDXL img2img. Uses low denoise to limit redraws; no separate reference image. Lettering/geometry fidelity and 24 GB VRAM use are not validated.");
+                    }
                     ui.label("Scene / background");
                     ui.menu_button(format!("Scene: {}", self.settings.scene), |ui| {
                         for (code, label) in [

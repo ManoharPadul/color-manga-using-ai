@@ -32,6 +32,25 @@ function Test-LocalBackend {
     } catch { return $false }
 }
 
+function Enable-MangaLargeSafetensorsPread {
+    param([Parameter(Mandatory=$true)][string]$ComfyPath)
+    $utilsPath = Join-Path $ComfyPath 'comfy/utils.py'
+    if (!(Test-Path -LiteralPath $utilsPath -PathType Leaf)) { throw "Cannot configure the Windows large-checkpoint reader; missing $utilsPath" }
+    $source = [IO.File]::ReadAllText($utilsPath)
+    $marker = '# MangaColorAI: use pread for large Windows safetensors to avoid mmap access violations.'
+    if ($source.Contains($marker)) { return }
+    $needle = '                with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:'
+    if (!$source.Contains($needle)) { throw 'ComfyUI safetensors loader layout is unsupported; no runtime file was modified.' }
+    $replacement = @'
+                # MangaColorAI: use pread for large Windows safetensors to avoid mmap access violations.
+                safetensors_backend = "pread" if os.name == "nt" and os.path.getsize(ckpt) >= 10 * 1024 ** 3 else "mmap"
+                with safetensors.safe_open(ckpt, framework="pt", device=device.type, backend=safetensors_backend) as f:
+'@
+    $backupPath = "$utilsPath.mangacolorai-original"
+    if (!(Test-Path -LiteralPath $backupPath -PathType Leaf)) { Copy-Item -LiteralPath $utilsPath -Destination $backupPath }
+    [IO.File]::WriteAllText($utilsPath, $source.Replace($needle, $replacement.TrimEnd("`r", "`n")), [Text.UTF8Encoding]::new($false))
+}
+
 function Save-LocalImage {
     param([string]$Uri, [string]$Destination)
     # Windows PowerShell's Invoke-WebRequest -OutFile expands brackets as
@@ -60,38 +79,67 @@ function Save-LocalImage {
 }
 
 function Start-LocalBackend {
-    foreach ($model in (Get-Content "$PSScriptRoot/models.json" -Raw | ConvertFrom-Json)) {
+    param([ValidateSet('4B','9B','Qwen21','Flux1Kontext','MiniMaxH3','IllustriousXL')][string]$ModelSize='4B')
+    $requiredModels = switch ($ModelSize) {
+        '9B' { Get-Content "$PSScriptRoot/9b-models.json" -Raw | ConvertFrom-Json; break }
+        'Qwen21' { Get-Content "$PSScriptRoot/qwen21-models.json" -Raw | ConvertFrom-Json; break }
+        'Flux1Kontext' { Get-Content "$PSScriptRoot/flux1-kontext-models.json" -Raw | ConvertFrom-Json; break }
+        'MiniMaxH3' { Get-Content "$PSScriptRoot/minimax-h3-models.json" -Raw | ConvertFrom-Json; break }
+        'IllustriousXL' { Get-Content "$PSScriptRoot/illustrious-xl-models.json" -Raw | ConvertFrom-Json; break }
+        default { Get-Content "$PSScriptRoot/models.json" -Raw | ConvertFrom-Json }
+    }
+    foreach ($model in $requiredModels) {
         $file = Join-Path $AiRoot ('models/' + $model.path)
-        if (!(Test-Path $file) -or (Get-Item $file).Length -ne $model.bytes) {
-            throw "Missing or incomplete model $($model.path). Run scripts/local-manga/Setup.ps1 first."
+        if (!(Test-Path -LiteralPath $file -PathType Leaf) -or (Get-Item -LiteralPath $file).Length -ne [long]$model.bytes) {
+            throw "Missing or incomplete model $($model.path). Run scripts/local-manga/Setup.ps1 with the matching -Include switch."
         }
     }
-    if (Test-LocalBackend) { return }
     $python = Join-Path $PortableRoot 'python_embeded/python.exe'
-    if (!(Test-Path -LiteralPath $python)) { throw 'Run scripts/local-manga/Setup.ps1 first.' }
     $config = Join-Path $AiRoot 'model-paths.yaml'
-    $modelRoot = (Join-Path $AiRoot 'models').Replace('\', '/')
+    $logs = Join-Path $AiRoot 'logs'
+    if ($ModelSize -eq 'Qwen21') {
+        $qwenRoot = Join-Path $AiRoot 'qwen21-cuda13'
+        $python = Join-Path $qwenRoot 'python_embeded/python.exe'
+        $config = Join-Path $qwenRoot 'model-paths.yaml'
+        $logs = Join-Path $qwenRoot 'logs'
+        if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Install the isolated Qwen runtime with scripts/local-manga/Setup.ps1 -IncludeQwen21.' }
+        $torchVersion = & $python -s -c "import importlib.metadata; print(importlib.metadata.version('torch'))"
+        if ($LASTEXITCODE -ne 0 -or $torchVersion.Trim() -ne '2.10.0+cu130') { throw "Qwen runtime needs PyTorch 2.10.0+cu130; found '$torchVersion'. Rerun Setup.ps1 -IncludeQwen21." }
+    }
+    if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Run scripts/local-manga/Setup.ps1 first.' }
+    if ($ModelSize -eq 'MiniMaxH3') {
+        $comfyVersionFile = Join-Path $ComfyRoot 'comfyui_version.py'
+        $h3NodeFile = Join-Path $ComfyRoot 'comfy_extras/nodes_minimax_h3.py'
+        $comfyVersion = if (Test-Path -LiteralPath $comfyVersionFile) { [regex]::Match((Get-Content -LiteralPath $comfyVersionFile -Raw), '__version__\s*=\s*["'']([^"'']+)["'']').Groups[1].Value } else { '' }
+        $h3NodeSource = if (Test-Path -LiteralPath $h3NodeFile) { Get-Content -LiteralPath $h3NodeFile -Raw } else { '' }
+        if ($comfyVersion -notmatch '^0\.(45|[5-9][0-9])\.' -or $h3NodeSource -notmatch 'node_id="MiniMaxH3ImageConditioning"') {
+            throw "MiniMax H3 Image needs ComfyUI 0.45.0 or newer with native MiniMaxH3ImageConditioning support. Found '$comfyVersion'. No runtime was changed. Run Setup.ps1 to install/update ComfyUI first."
+        }
+        Enable-MangaLargeSafetensorsPread -ComfyPath $ComfyRoot
+    }
+    if (!(Test-LocalBackend)) {
+        $modelRoot = (Join-Path $AiRoot 'models').Replace('\', '/')
     @"
 mangacolorai_local:
   base_path: '$modelRoot'
   diffusion_models: diffusion_models
+  checkpoints: checkpoints
   text_encoders: text_encoders
   vae: vae
   loras: loras
 "@ | Set-Content -LiteralPath $config -Encoding UTF8
-    $logs = Join-Path $AiRoot 'logs'
     New-Item -ItemType Directory -Force $logs | Out-Null
     $env:HF_HUB_OFFLINE = '1'
     $env:HF_HUB_DISABLE_TELEMETRY = '1'
     # cuBLASLt detects AVX-512 on this Ryzen but Windows exposes only AVX2.
     # NVIDIA's documented mask avoids an illegal CPU instruction in its GPU library.
     $env:CUBLASLT_DISABLE_CPU_INSTRUCTIONS_MASK = '1'
-    $args = @('-s', 'ComfyUI/main.py', '--windows-standalone-build',
-        '--listen', '127.0.0.1', '--port', '8188', '--disable-auto-launch',
-        '--offline', '--reserve-vram', '3', '--disable-dynamic-vram',
-        '--disable-async-offload', '--fp32-vae',
-        '--extra-model-paths-config', ('"' + $config + '"'))
-    $process = Start-Process -FilePath $python -ArgumentList $args -WorkingDirectory $PortableRoot `
+    $runtimeArgs = if ($ModelSize -eq 'MiniMaxH3') {
+        @('-s', 'ComfyUI/main.py', '--windows-standalone-build', '--listen', '127.0.0.1', '--port', '8188', '--disable-auto-launch', '--offline', '--reserve-vram', '4', '--extra-model-paths-config', ('"' + $config + '"'))
+    } else {
+        @('-s', 'ComfyUI/main.py', '--windows-standalone-build', '--listen', '127.0.0.1', '--port', '8188', '--disable-auto-launch', '--offline', '--reserve-vram', '3', '--disable-dynamic-vram', '--disable-async-offload', '--fp32-vae', '--extra-model-paths-config', ('"' + $config + '"'))
+    }
+    $process = Start-Process -FilePath $python -ArgumentList $runtimeArgs -WorkingDirectory $PortableRoot `
         -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logs 'backend.log') `
         -RedirectStandardError (Join-Path $logs 'backend-errors.log')
     $process.Id | Set-Content (Join-Path $AiRoot 'backend.pid')
@@ -103,6 +151,30 @@ mangacolorai_local:
         Start-Sleep -Seconds 2
     }
     throw "Backend startup timed out. See $logs/backend-errors.log"
+    }
+    # Never switch runtimes under queued or running jobs. The tracked backend
+    # must be stopped explicitly before choosing a CUDA-incompatible model.
+    if ($TestBackend = Test-LocalBackend) {
+        $listener = Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        $tracked = 0
+        $pidFile = Join-Path $AiRoot 'backend.pid'
+        if (!$listener -or !(Test-Path -LiteralPath $pidFile) -or ![int]::TryParse((Get-Content -LiteralPath $pidFile -Raw).Trim(), [ref]$tracked) -or [int]$listener.OwningProcess -ne $tracked) {
+            throw 'Port 8188 is used by an untracked ComfyUI process. Stop it manually; MangaColorAI will not interrupt it.'
+        }
+        $active = Get-CimInstance Win32_Process -Filter "ProcessId = $tracked"
+        $expectedPython = [IO.Path]::GetFullPath($python)
+        $expectedConfig = [IO.Path]::GetFullPath($config)
+        if (!$active -or [IO.Path]::GetFullPath([string]$active.ExecutablePath) -ne $expectedPython -or [string]$active.CommandLine -notlike ('*' + $expectedConfig + '*')) {
+            throw "The tracked backend runtime does not match $ModelSize. Finish jobs, run scripts/local-manga/Stop.ps1, then retry."
+        }
+        if ($ModelSize -eq 'MiniMaxH3') {
+            if ([string]$active.CommandLine -match '--disable-dynamic-vram|--disable-async-offload' -or [string]$active.CommandLine -notmatch '--reserve-vram\s+4') {
+                throw 'The tracked backend was not started with MiniMax H3 offload settings. Finish jobs, run scripts/local-manga/Stop.ps1, then retry.'
+            }
+        } elseif ([string]$active.CommandLine -notmatch '--disable-dynamic-vram' -or [string]$active.CommandLine -notmatch '--disable-async-offload' -or [string]$active.CommandLine -notmatch '--reserve-vram\s+3') {
+            throw "The tracked backend flags do not match $ModelSize. Finish jobs, run scripts/local-manga/Stop.ps1, then retry."
+        }
+    }
 }
 
 function Invoke-MangaImage {
@@ -155,9 +227,75 @@ function New-ColorizeGraph {
         [string]$ReferenceImageName, [ValidateSet('Fast','Detailed','BaseExperimental')][string]$Quality = 'Fast',
         [ValidateRange(0.2,1.0)][double]$Strength = 1.0,
         [ValidateRange(0,1.5)][double]$Consistency = 0,
-        [ValidateSet('FP8','BF16')][string]$Precision = 'FP8',
-        [ValidateSet('4B','9B')][string]$ModelSize = '4B',
+        [ValidateSet('Auto','FP8','BF16','INT8')][string]$Precision = 'FP8',
+        [ValidateSet('4B','9B','Qwen21','Flux1Kontext','MiniMaxH3','IllustriousXL')][string]$ModelSize = '4B',
         [ValidateRange(0,50)][int]$SamplingSteps=0)
+    if ($ModelSize -eq 'Qwen21') {
+        if ($Precision -ne 'INT8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0) { throw 'Qwen Image 2.1 requires INT8, Fast or Detailed quality and no FLUX consistency adapter.' }
+        $graph = Get-Content -LiteralPath (Join-Path $RepoRoot 'workflows/local-manga/qwen-image-2.1-api.json') -Raw | ConvertFrom-Json
+        $graph.'4'.inputs.image = $ImageName
+        $graph.'5'.inputs.prompt = $Instruction
+        $graph.'5'.inputs.resolution = [Math]::Max(256, [int]([Math]::Round([Math]::Sqrt($Megapixels * 1000000) / 32) * 32))
+        $graph.'6'.inputs.seed = $Seed
+        $graph.'6'.inputs.steps = if ($SamplingSteps -gt 0) { $SamplingSteps } else { 25 }
+        $graph.'6'.inputs.denoise = $Strength
+        $graph.'8'.inputs.filename_prefix = $Prefix
+        if ($ReferenceImageName) {
+            $graph | Add-Member -MemberType NoteProperty -Name '30' -Value @{class_type='LoadImage';inputs=@{image=$ReferenceImageName}}
+            $graph.'5'.inputs | Add-Member -MemberType NoteProperty -Name 'images.image_2' -Value @('30',0)
+        }
+        return $graph
+    }
+    if ($ModelSize -eq 'Flux1Kontext') {
+        if ($Precision -ne 'FP8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0) { throw 'FLUX.1 Kontext requires FP8 and no FLUX.2 consistency adapter.' }
+        $graph = Get-Content -LiteralPath (Join-Path $RepoRoot 'workflows/local-manga/flux1-kontext-api.json') -Raw | ConvertFrom-Json
+        $graph.'1'.inputs.image = $ImageName
+        $graph.'7'.inputs.text = $Instruction
+        $graph.'11'.inputs.seed = $Seed
+        $graph.'11'.inputs.steps = if ($SamplingSteps -gt 0) { $SamplingSteps } else { 20 }
+        $graph.'11'.inputs.denoise = $Strength
+        $graph.'13'.inputs.filename_prefix = $Prefix
+        if ($ReferenceImageName) {
+            $nodes = @{
+                '30' = @{class_type='LoadImage';inputs=@{image=$ReferenceImageName}}
+                '31' = @{class_type='FluxKontextImageScale';inputs=@{image=@('30',0)}}
+                '32' = @{class_type='VAEEncode';inputs=@{pixels=@('31',0);vae=@('5',0)}}
+                '33' = @{class_type='ReferenceLatent';inputs=@{conditioning=@('8',0);latent=@('32',0)}}
+            }
+            foreach ($key in $nodes.Keys) { $graph | Add-Member -MemberType NoteProperty -Name $key -Value $nodes[$key] }
+            $graph.'9'.inputs.conditioning = @('33',0)
+        }
+        return $graph
+    }
+    if ($ModelSize -eq 'MiniMaxH3') {
+        if ($Precision -ne 'INT8' -or $Quality -eq 'BaseExperimental' -or $Consistency -gt 0 -or $Strength -ne 1.0) { throw 'MiniMax H3 Image requires INT8, strength 1.0 and no FLUX consistency adapter.' }
+        $graph = Get-Content -LiteralPath (Join-Path $RepoRoot 'workflows/local-manga/minimax-h3-image-api.json') -Raw | ConvertFrom-Json
+        $graph.'1'.inputs.image = $ImageName
+        $graph.'2'.inputs.megapixels = $Megapixels
+        $graph.'7'.inputs.prompt = $Instruction
+        $graph.'9'.inputs.seed = $Seed
+        $graph.'9'.inputs.steps = if ($SamplingSteps -gt 0) { $SamplingSteps } else { 6 }
+        $graph.'11'.inputs.filename_prefix = $Prefix
+        if ($ReferenceImageName) {
+            $graph | Add-Member -MemberType NoteProperty -Name '30' -Value @{class_type='LoadImage';inputs=@{image=$ReferenceImageName}}
+            $graph.'7'.inputs | Add-Member -MemberType NoteProperty -Name 'images.image_2' -Value @('30',0)
+        }
+        return $graph
+    }
+    if ($ModelSize -eq 'IllustriousXL') {
+        if ($Consistency -gt 0 -or $Quality -eq 'BaseExperimental') { throw 'Illustrious XL uses its standalone SDXL img2img workflow; FLUX consistency and BaseExperimental are unavailable.' }
+        if ($ReferenceImageName) { throw 'Illustrious XL img2img does not use a separate reference image in this release. Remove -ReferenceImagePath or choose another model.' }
+        $graph = Get-Content -LiteralPath (Join-Path $RepoRoot 'workflows/local-manga/illustrious-xl-img2img-api.json') -Raw | ConvertFrom-Json
+        $graph.'1'.inputs.image = $ImageName
+        $graph.'2'.inputs.ckpt_name = 'Illustrious-XL-v2.0.safetensors'
+        $graph.'3'.inputs.text = $Instruction
+        $graph.'4'.inputs.text = 'text, lettering, duplicated words, altered glyphs, extra objects, changed face, changed eyes, changed pose, changed clothing boundaries, blurry, low quality'
+        $graph.'6'.inputs.seed = $Seed
+        $graph.'6'.inputs.steps = if ($SamplingSteps -gt 0) { $SamplingSteps } else { 20 }
+        $graph.'6'.inputs.denoise = $Strength
+        $graph.'8'.inputs.filename_prefix = $Prefix
+        return $graph
+    }
     if ($ModelSize -eq '9B' -and ($Precision -ne 'FP8' -or $Consistency -gt 0 -or $Quality -ne 'Fast')) {
         throw '9B currently supports FP8, Fast quality and no 4B consistency adapter.'
     }

@@ -1,13 +1,13 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$InputPath,
-    [ValidateSet('9B FP8','4B FP8','4B BF16')][string]$Model='4B FP8',
+    [ValidateSet('9B FP8','4B FP8','4B BF16','Qwen Image 2.1 INT8','FLUX.1 Kontext FP8','MiniMax H3 Image INT8','Illustrious XL v2.0 (experimental)')][string]$Model='4B FP8',
     [string]$StyleFile,
     [ValidateSet('FullPage','AutoStrips')][string]$ProcessingMode='FullPage',
     [ValidateSet('Source','Indoor','Outdoor','Mixed')][string]$Scene='Source',
     [string]$CharacterFile,
     [switch]$AssignCharacters,
-    [ValidateRange(1,50)][int]$Steps=4,
+    [ValidateRange(0,50)][int]$Steps=0,
     [ValidateRange(0,2147483647)][long]$Seed=42,
     [ValidateRange(0.1,4.0)][double]$Megapixels=1.5,
     [switch]$TextWorkflow,
@@ -65,7 +65,18 @@ $reviewStyle=Join-Path $root 'review-style.txt';$reviewPalette|Set-Content -Lite
 @{processing_mode=$ProcessingMode;scene=$Scene;model=$Model;steps=$Steps;seed=$Seed;megapixels=$Megapixels;megapixels_per_panel=$(if($ProcessingMode -eq 'AutoStrips'){$Megapixels}else{$null});megapixels_per_full_page=$(if($ProcessingMode -eq 'FullPage'){$Megapixels}else{$null});text_workflow=[bool]$TextWorkflow;preserve_original_text=[bool]$PreserveText;source_shadows=$SourceShadows;second_pass=[bool]$SecondPass;auto_repair=[bool]$AutoRepair;missing_color_sensitivity=$MissingColorSensitivity;max_color_repairs=$MaxColorRepairs;quality_report=[bool]$QualityReport;original_ink=[bool]$OriginalInk;strict_ink=[bool]$StrictInk;assign_characters=[bool]$AssignCharacters;character_file=$CharacterFile;target_language=$TargetLanguage;review=[bool]$Review;max_retries=$Retries;style_file=$StyleFile;review_config=$ReviewConfig;reference=$ReferenceImage}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $root 'run-settings.json') -Encoding UTF8
 $workRoot=Join-Path $root '_work';$null=[IO.Directory]::CreateDirectory($workRoot)
 [IO.File]::WriteAllText((Join-Path $workRoot 'README.txt'),'Intermediate diagnostic files only. The color directory contains the full-page color-stage result before optional source-ink restoration; any text protection may already have been applied. Use the final *-color.png files directly in the parent chapter folder.')
-$parts=$Model -split ' ';$size=$parts[0];$precision=$parts[1]
+$modelMap = @{
+    '4B FP8'=@{size='4B';precision='FP8';steps=4}
+    '4B BF16'=@{size='4B';precision='BF16';steps=4}
+    '9B FP8'=@{size='9B';precision='FP8';steps=4}
+    'Qwen Image 2.1 INT8'=@{size='Qwen21';precision='INT8';steps=25}
+    'FLUX.1 Kontext FP8'=@{size='Flux1Kontext';precision='FP8';steps=20}
+    'MiniMax H3 Image INT8'=@{size='MiniMaxH3';precision='INT8';steps=6}
+    'Illustrious XL v2.0 (experimental)'=@{size='IllustriousXL';precision='Auto';steps=20}
+}
+$modelSpec=$modelMap[$Model];$size=$modelSpec.size;$precision=$modelSpec.precision
+if(!$Steps){$Steps=$modelSpec.steps}
+if($size -eq 'MiniMaxH3'){$Megapixels=4.0}
 $records=@();$failures=@();$canceled=$false
 $config=Get-Content -LiteralPath (Join-Path $root 'run-settings.json') -Raw|ConvertFrom-Json
 $orderedConfig=[ordered]@{};foreach($property in ($config.PSObject.Properties|Sort-Object Name)){$orderedConfig[$property.Name]=$property.Value}
@@ -124,8 +135,13 @@ foreach($file in $files){
         }
         $planOptions=@{};$pageOptions=@{FullPage=($ProcessingMode -eq 'FullPage')};$assignmentError=$null
         if($AssignCharacters -and $CharacterFile){
+            if($size -notin @('4B','9B')){
+                $palette=$reviewPalette
+                Write-Host '[PALETTE] This model uses the saved chapter palette as page guidance; per-panel identity assignment is available with the Klein models.'
+            } else {
             try{
-            $proposal=& "$PSScriptRoot/Colorize-Panels.ps1" -InputPath $source -OutputDirectory (Join-Path $job 'panel-proposal') -Palette $palette -Steps $Steps -Seed $Seed -Megapixels $Megapixels -PlanOnly @pageOptions
+            $proposalModel=if($size -in @('4B','9B')){$size}else{'4B'}
+            $proposal=& "$PSScriptRoot/Colorize-Panels.ps1" -InputPath $source -OutputDirectory (Join-Path $job 'panel-proposal') -ModelSize $proposalModel -Palette $palette -Steps $Steps -Seed $Seed -Megapixels $Megapixels -PlanOnly @pageOptions
             $planOptions.PlanPath=Join-Path $job 'assigned-panels.json'
             $assignmentCache=Get-MangaAssignmentCache -ChapterSource $file.FullName -ImageSource $source -Profiles (Join-Path $root 'applied-characters.json') -Style $palette
             $reused=Restore-MangaApprovedAssignment -Cache $assignmentCache -Destination $planOptions.PlanPath
@@ -145,9 +161,18 @@ foreach($file in $files){
                 Write-Host '[APPEARANCE] Applied the automatic match for this page without waiting; it was not added to the approved reuse cache.'
             }
             }catch [OperationCanceledException]{throw}catch{$assignmentError=[string]$_;$planOptions=@{};Write-Warning ('Optional appearance matching unavailable; no identity/outfit guesses applied: '+$assignmentError);Write-Host '[COLOR_REVIEW] Appearance matching unavailable; inspect identity and outfit consistency.'}
+            }
         }
         Wait-MangaControl -ControlFile $ControlFile
-        $result=& "$PSScriptRoot/Colorize-Panels.ps1" -InputPath $source -OutputDirectory (Join-Path $job 'color') -ModelSize $size -Precision $precision -Palette $palette -Steps $Steps -Seed $Seed -Megapixels $Megapixels -ControlFile $ControlFile -OwnerProcessId $OwnerProcessId @pageOptions @planOptions
+        if($size -in @('4B','9B')){
+            $result=& "$PSScriptRoot/Colorize-Panels.ps1" -InputPath $source -OutputDirectory (Join-Path $job 'color') -ModelSize $size -Precision $precision -Palette $palette -Steps $Steps -Seed $Seed -Megapixels $Megapixels -ControlFile $ControlFile -OwnerProcessId $OwnerProcessId @pageOptions @planOptions
+        }else{
+            if($ProcessingMode -ne 'FullPage'){throw "$Model supports FullPage mode only in this release. Select Full Page before starting this model."}
+            $result=& "$PSScriptRoot/Colorize.ps1" -InputPath $source -OutputDirectory (Join-Path $job 'color') -ModelSize $size -Precision $precision -Palette $palette -Steps $Steps -Seed $Seed -Megapixels $Megapixels -CoverageMode $(if($QualityReport){'Report'}else{'Off'}) -ControlFile $ControlFile -OwnerProcessId $OwnerProcessId -NoOpen
+            $settingsPath=Join-Path ([IO.Path]::GetDirectoryName($result.image)) (([IO.Path]::GetFileName($result.image) -replace '-color\.png$','.json'))
+            $result | Add-Member -MemberType NoteProperty -Name settings -Value $settingsPath
+            $null=ConvertTo-MangaPanelInput -Source $source -Destination (Join-Path ([IO.Path]::GetDirectoryName($settingsPath)) 'decoded-original.png')
+        }
         $stages=@()
         $rawColor=$result.image
         $stages+=@{name='color-stage';path=$rawColor}

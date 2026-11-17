@@ -8,7 +8,7 @@ Install the recommended 4B model and runtime from the repository folder with:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-manga\Setup.ps1 -ModelSize 4B
 ```
 
-Use `-ModelSize 9B` for the 9B setup. Setup downloads several gigabytes and verifies model hashes.
+Use `-ModelSize 9B` for the 9B setup. Setup downloads several gigabytes and verifies model hashes. Other model choices are available in the studio after their setup completes: pass `-ModelSize None` and one or more of `-IncludeQwen21`, `-IncludeFlux1Kontext`, `-IncludeMiniMaxH3`, or `-IncludeIllustriousXL`. FLUX.1 Kontext needs a gated checkpoint placed manually. Qwen uses an isolated CUDA 13 Python runtime; MiniMax H3 requires ComfyUI 0.45.0 or newer; Illustrious is experimental SDXL img2img and is not source-locked. Check README.md for sizes and model-license notes. The ZIP includes no model weights.
 
 Image enlargement is handled by a separate utility: run `scripts/manga-upscale/Setup.ps1` once, then use `Start Manga Upscale AI.cmd`. It only upscales single images or folders with Real-ESRGAN x4plus-anime and FFmpeg; it does not invoke the MangaColorAI colorization backend. See [MANGA-UPSCALE.md](MANGA-UPSCALE.md).
 

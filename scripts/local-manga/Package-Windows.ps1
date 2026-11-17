@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='0.3.14')
+param([string]$Version='0.3.15')
 . "$PSScriptRoot/Common.ps1"
 $required = @('MangaColorAI.exe','MangaColorAI-Image.exe','MangaColorAI-Text.exe')
 foreach ($name in $required) {
